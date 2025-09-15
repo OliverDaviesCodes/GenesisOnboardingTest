@@ -12,7 +12,7 @@ builder.Services.AddControllers();
 
 // Configure Entity Framework
 builder.Services.AddDbContext<ApplicationDbContext>(options =>
-    options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection")));
+    options.UseSqlite(builder.Configuration.GetConnectionString("DefaultConnection")));
 
 // Configure JWT Authentication
 var jwtKey = builder.Configuration["Jwt:Key"] ?? throw new InvalidOperationException("JWT Key not configured");
@@ -37,7 +37,7 @@ builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowReactApp", builder =>
     {
-        builder.WithOrigins("http://localhost:5173", "http://localhost:3000") // Vite and CRA default ports
+        builder.WithOrigins("http://localhost:5173", "http://localhost:3000", "https://localhost:7042") // Vite, CRA, and backend ports
                .AllowAnyHeader()
                .AllowAnyMethod()
                .AllowCredentials();

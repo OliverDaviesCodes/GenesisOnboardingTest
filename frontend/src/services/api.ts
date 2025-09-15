@@ -2,7 +2,7 @@ import axios from 'axios';
 import type { AxiosResponse } from 'axios';
 import type { AuthResponse, LoginRequest, RegisterRequest, DataEntry, CreateDataEntryRequest, UpdateDataEntryRequest } from '../types';
 
-const API_BASE_URL = 'https://localhost:7201/api'; // Default .NET Core Web API URL
+const API_BASE_URL = 'http://localhost:5160/api'; // .NET Core Web API HTTP URL for development
 
 const api = axios.create({
   baseURL: API_BASE_URL,
