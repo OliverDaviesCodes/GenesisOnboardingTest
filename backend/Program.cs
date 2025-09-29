@@ -7,69 +7,74 @@ using backend.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Add services to the container.
+// Force Kestrel to bind to 7042/7041
+builder.WebHost.UseUrls("https://localhost:7042");
+
+// Controllers
 builder.Services.AddControllers();
 
-// Configure Entity Framework
+// EF Core
 builder.Services.AddDbContext<ApplicationDbContext>(options =>
-    options.UseSqlite(builder.Configuration.GetConnectionString("DefaultConnection")));
+    options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection")));
 
-// Configure JWT Authentication
-var jwtKey = builder.Configuration["Jwt:Key"] ?? throw new InvalidOperationException("JWT Key not configured");
-builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
+// JWT
+builder.Services
+    .AddAuthentication(options =>
+    {
+        options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
+        options.DefaultChallengeScheme = JwtBearerDefaults.AuthenticationScheme;
+    })
     .AddJwtBearer(options =>
     {
+        options.RequireHttpsMetadata = false;
+        options.SaveToken = true;
         options.TokenValidationParameters = new TokenValidationParameters
         {
-            ValidateIssuerSigningKey = true,
-            IssuerSigningKey = new SymmetricSecurityKey(Encoding.ASCII.GetBytes(jwtKey)),
             ValidateIssuer = true,
-            ValidIssuer = builder.Configuration["Jwt:Issuer"],
             ValidateAudience = true,
-            ValidAudience = builder.Configuration["Jwt:Audience"],
             ValidateLifetime = true,
-            ClockSkew = TimeSpan.Zero
+            ValidateIssuerSigningKey = true,
+            ValidIssuer = builder.Configuration["Jwt:Issuer"],
+            ValidAudience = builder.Configuration["Jwt:Audience"],
+            IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(builder.Configuration["Jwt:Key"]!))
         };
     });
 
-// Configure CORS
+// CORS (allow Vite dev server)
 builder.Services.AddCors(options =>
 {
-    options.AddPolicy("AllowReactApp", builder =>
+    options.AddPolicy("DefaultCors", policy =>
     {
-        builder.WithOrigins("http://localhost:5173", "http://localhost:3000", "https://localhost:7042") // Vite, CRA, and backend ports
-               .AllowAnyHeader()
-               .AllowAnyMethod()
-               .AllowCredentials();
+        policy.WithOrigins("http://localhost:5173")
+              .AllowAnyHeader()
+              .AllowAnyMethod()
+              .AllowCredentials();
     });
 });
 
-// Register services
+// DI
 builder.Services.AddScoped<IAuthService, AuthService>();
 
-// Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
+// Swagger
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
 var app = builder.Build();
 
-// Configure the HTTP request pipeline.
+// Debug logs
+var cs = app.Configuration.GetConnectionString("DefaultConnection");
+Console.WriteLine($"[Startup] Env: {app.Environment.EnvironmentName}");
+Console.WriteLine($"[Startup] DefaultConnection: {cs}");
+
 if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();
     app.UseSwaggerUI();
 }
 
-// Enable CORS
-app.UseCors("AllowReactApp");
-
 app.UseHttpsRedirection();
-
-// Enable Authentication & Authorization
+app.UseCors("DefaultCors");
 app.UseAuthentication();
 app.UseAuthorization();
-
-// Map controllers
 app.MapControllers();
-
 app.Run();

@@ -2,7 +2,7 @@ import axios from 'axios';
 import type { AxiosResponse } from 'axios';
 import type { AuthResponse, LoginRequest, RegisterRequest, DataEntry, CreateDataEntryRequest, UpdateDataEntryRequest } from '../types';
 
-const API_BASE_URL = 'http://localhost:5160/api'; // .NET Core Web API HTTP URL for development
+const API_BASE_URL = 'https://localhost:7042/api'; // .NET Core Web API HTTP URL for development
 
 const api = axios.create({
   baseURL: API_BASE_URL,
@@ -46,11 +46,19 @@ export const authApi = {
 };
 
 export const dataEntriesApi = {
+  // Personal (CRUD)
   getAll: async (): Promise<DataEntry[]> => {
     const response: AxiosResponse<DataEntry[]> = await api.get('/dataentries');
     return response.data;
   },
 
+  // All users (read-only)
+  getAllUsers: async (): Promise<DataEntry[]> => {
+    const response: AxiosResponse<DataEntry[]> = await api.get('/dataentries/all');
+    return response.data;
+  },
+
+  // ...existing CRUD methods...
   getById: async (id: number): Promise<DataEntry> => {
     const response: AxiosResponse<DataEntry> = await api.get(`/dataentries/${id}`);
     return response.data;
@@ -61,9 +69,10 @@ export const dataEntriesApi = {
     return response.data;
   },
 
-  update: async (id: number, data: UpdateDataEntryRequest): Promise<void> => {
-    await api.put(`/dataentries/${id}`, data);
-  },
+  update: async (id: number, data: UpdateDataEntryRequest): Promise<DataEntry> => {
+  const response = await api.put(`/dataentries/${id}`, data);
+  return response.data;
+},
 
   delete: async (id: number): Promise<void> => {
     await api.delete(`/dataentries/${id}`);

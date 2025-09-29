@@ -1,9 +1,11 @@
 import React, { useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
+import { useNavigate } from 'react-router-dom';
 import type { RegisterRequest } from '../types';
 
 const Register: React.FC = () => {
   const { register } = useAuth();
+  const navigate = useNavigate();
   const [formData, setFormData] = useState<RegisterRequest>({
     email: '',
     password: '',
@@ -25,11 +27,13 @@ const Register: React.FC = () => {
     }
 
     const success = await register(formData);
-    
+
     if (!success) {
       setError('Registration failed. Email may already be in use.');
+    } else {
+      navigate('/login'); // Redirect to Login page after successful registration
     }
-    
+
     setIsLoading(false);
   };
 

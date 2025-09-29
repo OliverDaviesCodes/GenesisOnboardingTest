@@ -26,55 +26,85 @@ namespace backend.Controllers
             return int.Parse(userIdClaim ?? "0");
         }
         
+        // Personal entries (CRUD)
         [HttpGet]
-        public async Task<ActionResult<IEnumerable<DataEntryDto>>> GetDataEntries()
+        public async Task<IActionResult> GetPersonal()
         {
             var userId = GetCurrentUserId();
-            
             var entries = await _context.DataEntries
-                .Where(d => d.UserId == userId)
-                .Select(d => new DataEntryDto
-                {
-                    Id = d.Id,
-                    Title = d.Title,
-                    Description = d.Description,
-                    Category = d.Category,
-                    Value = d.Value,
-                    CreatedAt = d.CreatedAt,
-                    UpdatedAt = d.UpdatedAt,
-                    UserId = d.UserId
-                })
+                .Include(e => e.User)
+                .Where(e => e.UserId == userId) // <-- This line is critical!
                 .ToListAsync();
-                
-            return Ok(entries);
+
+            var result = entries.Select(e => new DataEntryDto
+            {
+                Id = e.Id,
+                Title = e.Title,
+                Description = e.Description,
+                Category = e.Category,
+                Value = e.Value,
+                CreatedAt = e.CreatedAt,
+                UpdatedAt = e.UpdatedAt,
+                UserId = e.UserId,
+                CreatedBy = e.User != null ? $"{e.User.FirstName} {e.User.LastName}" : "Unknown"
+            }).ToList();
+
+            return Ok(result);
+        }
+        
+        // All entries (Read-only)
+        [HttpGet("all")]
+        public async Task<IActionResult> GetAll()
+        {
+            var entries = await _context.DataEntries
+                .Include(e => e.User) // Make sure User navigation property is included
+                .ToListAsync();
+
+            var dtos = entries.Select(e => new DataEntryDto
+            {
+                Id = e.Id,
+                Title = e.Title,
+                Description = e.Description,
+                Category = e.Category,
+                Value = e.Value,
+                CreatedAt = e.CreatedAt,
+                UpdatedAt = e.UpdatedAt,
+                UserId = e.UserId,
+                CreatedBy = e.User != null ? $"{e.User.FirstName} {e.User.LastName}" : "Unknown"
+            }).ToList();
+
+            return Ok(dtos);
         }
         
         [HttpGet("{id}")]
         public async Task<ActionResult<DataEntryDto>> GetDataEntry(int id)
         {
             var userId = GetCurrentUserId();
-            
+
             var entry = await _context.DataEntries
+                .Include(d => d.User)
                 .Where(d => d.Id == id && d.UserId == userId)
-                .Select(d => new DataEntryDto
-                {
-                    Id = d.Id,
-                    Title = d.Title,
-                    Description = d.Description,
-                    Category = d.Category,
-                    Value = d.Value,
-                    CreatedAt = d.CreatedAt,
-                    UpdatedAt = d.UpdatedAt,
-                    UserId = d.UserId
-                })
                 .FirstOrDefaultAsync();
-                
+
             if (entry == null)
             {
                 return NotFound();
             }
-            
-            return Ok(entry);
+
+            var result = new DataEntryDto
+            {
+                Id = entry.Id,
+                Title = entry.Title,
+                Description = entry.Description,
+                Category = entry.Category,
+                Value = entry.Value,
+                CreatedAt = entry.CreatedAt,
+                UpdatedAt = entry.UpdatedAt,
+                UserId = entry.UserId,
+                CreatedBy = entry.User != null ? $"{entry.User.FirstName} {entry.User.LastName}" : "Unknown"
+            };
+
+            return Ok(result);
         }
         
         [HttpPost]
@@ -84,9 +114,9 @@ namespace backend.Controllers
             {
                 return BadRequest(ModelState);
             }
-            
+
             var userId = GetCurrentUserId();
-            
+
             var entry = new DataEntry
             {
                 Title = createDto.Title,
@@ -97,10 +127,13 @@ namespace backend.Controllers
                 CreatedAt = DateTime.UtcNow,
                 UpdatedAt = DateTime.UtcNow
             };
-            
+
             _context.DataEntries.Add(entry);
             await _context.SaveChangesAsync();
-            
+
+            // Fetch the user for CreatedBy
+            var user = await _context.Users.FindAsync(userId);
+
             var result = new DataEntryDto
             {
                 Id = entry.Id,
@@ -110,9 +143,10 @@ namespace backend.Controllers
                 Value = entry.Value,
                 CreatedAt = entry.CreatedAt,
                 UpdatedAt = entry.UpdatedAt,
-                UserId = entry.UserId
+                UserId = entry.UserId,
+                CreatedBy = user != null ? $"{user.FirstName} {user.LastName}" : "Unknown"
             };
-            
+
             return CreatedAtAction(nameof(GetDataEntry), new { id = entry.Id }, result);
         }
         
@@ -127,6 +161,7 @@ namespace backend.Controllers
             var userId = GetCurrentUserId();
             
             var entry = await _context.DataEntries
+                .Include(d => d.User) // <-- Include User for CreatedBy
                 .FirstOrDefaultAsync(d => d.Id == id && d.UserId == userId);
                 
             if (entry == null)
@@ -141,8 +176,22 @@ namespace backend.Controllers
             entry.UpdatedAt = DateTime.UtcNow;
             
             await _context.SaveChangesAsync();
-            
-            return NoContent();
+
+            // Return the updated entry with CreatedBy
+            var result = new DataEntryDto
+            {
+                Id = entry.Id,
+                Title = entry.Title,
+                Description = entry.Description,
+                Category = entry.Category,
+                Value = entry.Value,
+                CreatedAt = entry.CreatedAt,
+                UpdatedAt = entry.UpdatedAt,
+                UserId = entry.UserId,
+                CreatedBy = entry.User != null ? $"{entry.User.FirstName} {entry.User.LastName}" : "Unknown"
+            };
+
+            return Ok(result);
         }
         
         [HttpDelete("{id}")]

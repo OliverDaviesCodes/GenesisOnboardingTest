@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import type { CreateDataEntryRequest } from '../types';
+import { useAuth } from '../contexts/AuthContext';
 
 interface DataEntryFormProps {
   onSubmit: (data: CreateDataEntryRequest) => Promise<void>;
@@ -14,11 +15,14 @@ const DataEntryForm: React.FC<DataEntryFormProps> = ({
   initialData,
   isLoading = false,
 }) => {
+  const { user } = useAuth();
+
   const [formData, setFormData] = useState<CreateDataEntryRequest>({
     title: initialData?.title || '',
     description: initialData?.description || '',
     category: initialData?.category || '',
     value: initialData?.value || 0,
+    // Remove createdBy
   });
 
   const [error, setError] = useState('');
@@ -69,7 +73,7 @@ const DataEntryForm: React.FC<DataEntryFormProps> = ({
       <h3>{initialData ? 'Edit Data Entry' : 'Create New Data Entry'}</h3>
       <form onSubmit={handleSubmit}>
         <div style={{ marginBottom: '1rem' }}>
-          <label htmlFor="title">Title:</label>
+          <label htmlFor="title" style={{ color: '#000' }}>Title:</label>
           <input
             type="text"
             id="title"
@@ -88,7 +92,7 @@ const DataEntryForm: React.FC<DataEntryFormProps> = ({
         </div>
 
         <div style={{ marginBottom: '1rem' }}>
-          <label htmlFor="category">Category:</label>
+          <label htmlFor="category" style={{ color: '#000' }}>Category:</label>
           <select
             id="category"
             name="category"
@@ -113,7 +117,7 @@ const DataEntryForm: React.FC<DataEntryFormProps> = ({
         </div>
 
         <div style={{ marginBottom: '1rem' }}>
-          <label htmlFor="value">Value:</label>
+          <label htmlFor="value" style={{ color: '#000' }}>Value:</label>
           <input
             type="number"
             id="value"
@@ -134,7 +138,7 @@ const DataEntryForm: React.FC<DataEntryFormProps> = ({
         </div>
 
         <div style={{ marginBottom: '1rem' }}>
-          <label htmlFor="description">Description:</label>
+          <label htmlFor="description" style={{ color: '#000' }}>Description:</label>
           <textarea
             id="description"
             name="description"

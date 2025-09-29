@@ -24,7 +24,7 @@ function AppRoutes() {
         path="/dashboard" 
         element={
           <ProtectedRoute>
-            <Dashboard />
+            <Dashboard /> {/* <-- Render the full dashboard page here */}
           </ProtectedRoute>
         } 
       />

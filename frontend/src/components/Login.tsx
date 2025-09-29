@@ -1,9 +1,11 @@
 import React, { useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
+import { useNavigate } from 'react-router-dom';
 import type { LoginRequest } from '../types';
 
 const Login: React.FC = () => {
   const { login } = useAuth();
+  const navigate = useNavigate();
   const [formData, setFormData] = useState<LoginRequest>({
     email: '',
     password: '',
@@ -16,12 +18,16 @@ const Login: React.FC = () => {
     setError('');
     setIsLoading(true);
 
+    console.log('Submitting login:', formData);
     const success = await login(formData);
-    
+    console.log('Login result:', success);
+
     if (!success) {
       setError('Invalid email or password');
+    } else {
+      navigate('/dashboard'); // <-- This is the correct route for your grid
     }
-    
+
     setIsLoading(false);
   };
 

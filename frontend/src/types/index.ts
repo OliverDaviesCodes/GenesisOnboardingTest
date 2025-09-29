@@ -3,15 +3,15 @@ import type { ReactNode } from 'react';
 export type { ReactNode };
 
 export interface User {
-  id: number;
+  id: string;
   email: string;
-  firstName: string;
-  lastName: string;
+  name: string;
 }
 
 export interface AuthResponse {
-  token: string;
-  user: User;
+  accessToken: string;
+  refreshToken: string;
+  expiresIn: number;
 }
 
 export interface LoginRequest {

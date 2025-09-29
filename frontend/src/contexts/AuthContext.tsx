@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import type { ReactNode, User, AuthResponse, LoginRequest, RegisterRequest } from '../types';
 import { authApi } from '../services/api';
+import { jwtDecode } from "jwt-decode";
 
 interface AuthContextType {
   user: User | null;
@@ -25,19 +26,61 @@ interface AuthProviderProps {
   children: ReactNode;
 }
 
+let didLogJwtClaims = false;
+
+function getUserFromToken(token: string | null): User | null {
+  if (!token) return null;
+  try {
+    const decoded: any = jwtDecode(token);
+
+    // One-time log to inspect available claim keys
+    if (!didLogJwtClaims) {
+      didLogJwtClaims = true;
+      console.group('[Auth] JWT claims');
+      console.info('keys:', Object.keys(decoded));
+      console.info('payload:', decoded);
+      console.groupEnd();
+    }
+
+    const id =
+      String(
+        decoded.sub ??
+          decoded.nameid ??
+          decoded['http://schemas.xmlsoap.org/ws/2005/05/identity/claims/nameidentifier'] ??
+          ''
+      );
+
+    const email =
+      decoded.email ??
+      decoded['http://schemas.xmlsoap.org/ws/2005/05/identity/claims/emailaddress'] ??
+      '';
+
+    const name =
+      decoded.name ??
+      decoded.unique_name ??
+      decoded['http://schemas.xmlsoap.org/ws/2005/05/identity/claims/name'] ??
+      'User';
+
+    return { id, email, name } as User;
+  } catch {
+    return null;
+  }
+}
+
 export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
   const [token, setToken] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    // Check for existing auth data on mount
     const storedToken = localStorage.getItem('token');
-    const storedUser = localStorage.getItem('user');
-
-    if (storedToken && storedUser) {
+    if (storedToken) {
       setToken(storedToken);
-      setUser(JSON.parse(storedUser));
+      const restored = getUserFromToken(storedToken);
+      console.info('[Auth] userObj from token (restore):', restored);
+      setUser(restored);
+    } else {
+      setUser(null);
     }
     setIsLoading(false);
   }, []);
@@ -45,13 +88,13 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const login = async (credentials: LoginRequest): Promise<boolean> => {
     try {
       const response: AuthResponse = await authApi.login(credentials);
-      
-      setToken(response.token);
-      setUser(response.user);
-      
-      localStorage.setItem('token', response.token);
-      localStorage.setItem('user', JSON.stringify(response.user));
-      
+
+      setToken(response.accessToken);
+      const userObj = getUserFromToken(response.accessToken);
+      console.log('[Auth] Decoded JWT:', userObj);
+      setUser(userObj);
+
+      localStorage.setItem('token', response.accessToken);
       return true;
     } catch (error) {
       console.error('Login failed:', error);
@@ -61,14 +104,8 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
   const register = async (userData: RegisterRequest): Promise<boolean> => {
     try {
-      const response: AuthResponse = await authApi.register(userData);
-      
-      setToken(response.token);
-      setUser(response.user);
-      
-      localStorage.setItem('token', response.token);
-      localStorage.setItem('user', JSON.stringify(response.user));
-      
+      // Registration returns 204 No Content, so no response body
+      await authApi.register(userData);
       return true;
     } catch (error) {
       console.error('Registration failed:', error);
