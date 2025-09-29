@@ -6,7 +6,7 @@ using Microsoft.EntityFrameworkCore.Migrations;
 namespace backend.Migrations
 {
     /// <inheritdoc />
-    public partial class InitialCreate : Migration
+    public partial class Baseline : Migration
     {
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
@@ -54,7 +54,29 @@ namespace backend.Migrations
                 });
 
             migrationBuilder.CreateTable(
-                name: "TestRecords",
+                name: "RefreshTokens",
+                columns: table => new
+                {
+                    Id = table.Column<int>(type: "int", nullable: false)
+                        .Annotation("SqlServer:Identity", "1, 1"),
+                    Token = table.Column<string>(type: "nvarchar(max)", nullable: false),
+                    Expires = table.Column<DateTime>(type: "datetime2", nullable: false),
+                    IsRevoked = table.Column<bool>(type: "bit", nullable: false),
+                    UserId = table.Column<int>(type: "int", nullable: false)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_RefreshTokens", x => x.Id);
+                    table.ForeignKey(
+                        name: "FK_RefreshTokens_Users_UserId",
+                        column: x => x.UserId,
+                        principalTable: "Users",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Cascade);
+                });
+
+            migrationBuilder.CreateTable(
+                name: "TestRecord",
                 columns: table => new
                 {
                     Id = table.Column<int>(type: "int", nullable: false)
@@ -62,14 +84,14 @@ namespace backend.Migrations
                     Title = table.Column<string>(type: "nvarchar(100)", maxLength: 100, nullable: false),
                     Description = table.Column<string>(type: "nvarchar(1000)", maxLength: 1000, nullable: true),
                     Status = table.Column<string>(type: "nvarchar(20)", maxLength: 20, nullable: false),
-                    CreatedAt = table.Column<DateTime>(type: "datetime2", nullable: false, defaultValueSql: "GETUTCDATE()"),
+                    CreatedAt = table.Column<DateTime>(type: "datetime2", nullable: false),
                     UserId = table.Column<int>(type: "int", nullable: false)
                 },
                 constraints: table =>
                 {
-                    table.PrimaryKey("PK_TestRecords", x => x.Id);
+                    table.PrimaryKey("PK_TestRecord", x => x.Id);
                     table.ForeignKey(
-                        name: "FK_TestRecords_Users_UserId",
+                        name: "FK_TestRecord_Users_UserId",
                         column: x => x.UserId,
                         principalTable: "Users",
                         principalColumn: "Id",
@@ -82,15 +104,20 @@ namespace backend.Migrations
                 column: "UserId");
 
             migrationBuilder.CreateIndex(
+                name: "IX_RefreshTokens_UserId",
+                table: "RefreshTokens",
+                column: "UserId");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_TestRecord_UserId",
+                table: "TestRecord",
+                column: "UserId");
+
+            migrationBuilder.CreateIndex(
                 name: "IX_Users_Email",
                 table: "Users",
                 column: "Email",
                 unique: true);
-
-            migrationBuilder.CreateIndex(
-                name: "IX_TestRecords_UserId",
-                table: "TestRecords",
-                column: "UserId");
         }
 
         /// <inheritdoc />
@@ -100,7 +127,10 @@ namespace backend.Migrations
                 name: "DataEntries");
 
             migrationBuilder.DropTable(
-                name: "TestRecords");
+                name: "RefreshTokens");
+
+            migrationBuilder.DropTable(
+                name: "TestRecord");
 
             migrationBuilder.DropTable(
                 name: "Users");
