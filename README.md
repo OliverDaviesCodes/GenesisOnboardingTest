@@ -1,304 +1,148 @@
 # GenesisOnboardingTest
 
-A full‑stack web application built with React/Vite frontend and .NET 8 Web API backend, featuring JWT auth and DevExpress Data Grid.
+A full-stack web application built with React/Vite frontend and .NET Core Web API backend, featuring user authentication and data management with DevExpress Data Grid.
 
 ## Features
 
-- User Authentication (JWT)
-- CRUD Data Management
-- DevExpress React Data Grid (sorting, filtering, editing, summaries)
-- CORS between frontend and backend
-- Security: BCrypt password hashing, parameterized queries, input validation
+- **User Authentication**: JWT-based authentication with login/register functionality
+- **Data Management**: CRUD operations for data entries with form validation
+- **DevExpress Data Grid**: Interactive data grid with sorting, filtering, editing, and summary features
+- **CORS Support**: Proper cross-origin request handling between frontend and backend
+- **Security**: BCrypt password hashing, parameterized SQL queries, input validation
 
 ## Tech Stack
 
-- Frontend: React 18 + TypeScript, Vite, Axios, React Router, DevExpress Grid
-- Backend: .NET 8 Web API, EF Core (SQL Server), JWT Bearer, BCrypt, AutoMapper
-- Database: SQL Server (LocalDB for dev, SQL Server 2019/2022 for prod)
+### Frontend
+- React 18 with TypeScript
+- Vite for development and build tooling
+- DevExpress React Data Grid
+- Axios for API communication
+- React Router for navigation
 
----
+### Backend
+- .NET Core 8.0 Web API
+- Entity Framework Core with SQL Server
+- JWT Bearer authentication
+- BCrypt for password hashing
+- AutoMapper for object mapping
 
-## Production SQL Server Setup (step‑by‑step)
+### Database
+- Microsoft SQL Server (LocalDB for development)
 
-Target instance used in testing: OLIVERRANDOM\SQLEXPRESS01 (SQL Server 2022 Express). Replace names/passwords as needed.
+## Getting Started
 
-1) Ensure SQL Server is running
-```powershell
-Get-Service 'MSSQL$SQLEXPRESS01'   # Status should be Running
-```
+### Prerequisites
+- Node.js 18+ and npm
+- .NET 8.0 SDK
+- SQL Server or SQL Server LocalDB
 
-2) Enable TCP/IP and set a fixed port (once)
-- Open “SQL Server Configuration Manager”.
-- SQL Server Network Configuration → Protocols for SQLEXPRESS01 → TCP/IP → Enabled = Yes.
-- TCP/IP → Properties → IP Addresses:
-  - Clear all “TCP Dynamic Ports”.
-  - In “IPAll”, set “TCP Port” = 1433.
-- Restart the “SQL Server (SQLEXPRESS01)” service.
+### Backend Setup
 
-3) Open the Windows Firewall port
-```powershell
-netsh advfirewall firewall add rule name="SQL Server SQLEXPRESS01 1433" dir=in action=allow protocol=TCP localport=1433
-```
-
-4) Optional: use SQL Browser instead of a fixed port
-```powershell
-Get-Service 'SQLBrowser' | Start-Service
-# Then you can connect without ",1433"
-```
-
-5) Test connectivity
-```powershell
-# Local shared memory (works even if TCP is off)
-sqlcmd -S .\SQLEXPRESS01 -E
-
-# TCP on fixed port (increase timeout)
-sqlcmd -S tcp:OLIVERRANDOM\SQLEXPRESS01,1433 -E -l 30
-```
-
-6) Create the production database and app login
-Paste the following in SSMS (New Query) or in sqlcmd (remember GO on a new line to execute):
-```sql
-CREATE DATABASE GenesisOnboardingProd;
-GO
-
-CREATE LOGIN app_genesis WITH PASSWORD = 'ChangeMe!Strong#Password2025', CHECK_POLICY = ON;
-GO
-
-USE GenesisOnboardingProd;
-GO
-CREATE USER app_genesis FOR LOGIN app_genesis;
-GO
-EXEC sp_addrolemember N'db_datareader', N'app_genesis';
-GO
-EXEC sp_addrolemember N'db_datawriter', N'app_genesis';
-GO
--- Only if deployment needs schema changes (remove after):
--- EXEC sp_addrolemember N'db_ddladmin', N'app_genesis';
--- GO
-
--- Quick check
-SELECT DB_NAME() AS CurrentDb;
-GO
-```
-
-7) Test the app login works
-```powershell
-sqlcmd -S tcp:OLIVERRANDOM\SQLEXPRESS01,1433 -U app_genesis -P "ChangeMe!Strong#Password2025" -d GenesisOnboardingProd -Q "SELECT SUSER_SNAME() AS LoginName, DB_NAME() AS CurrentDb;"
-```
-
-8) Deploy schema to prod (idempotent EF script)
-```powershell
-cd ".\backend"
-dotnet tool update -g dotnet-ef
-dotnet ef migrations script --idempotent -o .\migrations-prod.sql
-
-# Run via sqlcmd against prod DB:
-sqlcmd -S tcp:OLIVERRANDOM\SQLEXPRESS01,1433 -U app_genesis -P "ChangeMe!Strong#Password2025" -d GenesisOnboardingProd -i ".\migrations-prod.sql"
-```
-
-9) Point the site to the prod DB
-App settings (prefer environment variables in real prod):
-```json
-{
-  "ConnectionStrings": {
-    "DefaultConnection": "Server=OLIVERRANDOM\\SQLEXPRESS01,1433;Database=GenesisOnboardingProd;User Id=app_genesis;Password=ChangeMe!Strong#Password2025;Encrypt=True;TrustServerCertificate=True;MultipleActiveResultSets=True;Connection Timeout=30;"
-  }
-}
-```
-
-Or via environment variable:
-```powershell
-[Environment]::SetEnvironmentVariable(
-  "ConnectionStrings__DefaultConnection",
-  "Server=OLIVERRANDOM\\SQLEXPRESS01,1433;Database=GenesisOnboardingProd;User Id=app_genesis;Password=ChangeMe!Strong#Password2025;Encrypt=True;TrustServerCertificate=True;MultipleActiveResultSets=True;Connection Timeout=30;",
-  "Machine"
-)
-```
-
-10) Verify the backend connects (Production environment)
-```powershell
-cd ".\backend"
-$env:ASPNETCORE_ENVIRONMENT="Production"
-dotnet run
-```
-
----
-
-## What went wrong (time‑boxed production DB attempt)
-
-- TCP timeouts with sqlcmd
-  - Symptom: “TCP Provider: The wait operation timed out… Login timeout expired”.
-
-  - Causes discovered:
-    - Wrong connection syntax tried (“1,1433 -E” without -S and instance).
-    - TCP/IP not enabled or not listening on a fixed port.
-    - Firewall not opened for 1433.
-
-  - Fixes applied:
-    - Corrected command: sqlcmd -S tcp:OLIVERRANDOM\SQLEXPRESS01,1433 -E -l 30
-    - Enabled TCP/IP and set port 1433 in SQL Server Configuration Manager.
-    - Added Windows Firewall rule for 1433.
-    - Alternative: started SQL Browser and connected without specifying a port.
-
-- EF Core migrations and existing objects
-  - “There is already an object named 'Users'” when applying schema.
-  - Cause: Duplicate/merged migrations and an already‑provisioned DB.
-  - Resolution options:
-    - Dev reset: drop dev DB, delete Migrations, add InitialCreate, update DB.
-    - Baseline prod: delete Migrations, add Baseline with --ignore-changes, update DB, then create the next real migration and deploy via idempotent script.
-
-- JWT name claim showed as “User”
-  - Cause: Name was emitted under a different claim key (ASP.NET namespaced claims).
-  - Fix: Map multiple claim keys in getUserFromToken and fallback to email; use string user.id to match JWT sub/nameidentifier.
-
-- Git setup and recovery
-  - Not a git repository and “unrelated histories” issues while connecting to GitHub.
-  - Fixes:
-    - git init; add remote; initial commit; push -u origin main.
-    - First pull with git pull --allow-unrelated-histories origin main.
-    - Recovery after mistakes: git reset --hard ORIG_HEAD; git reflog to locate a good state.
-
-Time constraints
-- Ran out of time while wiring production TCP and deploying schema cleanly.
-- Documented exact commands and recovery steps to finish quickly later.
-
----
-
-## Next steps (checklist to production‑ready)
-
-- [ ] Confirm SQL instance listens on 1433 (or start SQL Browser) and firewall is open.
-- [ ] Create DB/login (already scripted above).
-- [ ] Generate EF idempotent script and run on prod DB.
-- [ ] Set production connection string via environment variable.
-- [ ] Run backend in Production mode and test basic CRUD.
-- [ ] Remove db_ddladmin from app_genesis if granted temporarily.
-- [ ] Configure backups (FULL nightly, DIFF daily, LOG every 15 min).
-- [ ] Add monitoring/alerts and enforce TLS (TrustServerCertificate=False with a real cert).
-
----
-
-## Getting Started (Development)
-
-Prerequisites
-- Node.js 18+
-- .NET 8 SDK
-- SQL Server LocalDB or SQL Server 2019/2022
-
-Backend
+1. Navigate to the backend directory:
 ```bash
 cd backend
+```
+
+2. Restore packages:
+```bash
 dotnet restore
-# If starting fresh schema in dev:
+```
+
+3. Update the database connection string in `appsettings.json` if needed.
+
+4. Apply database migrations:
+```bash
 dotnet ef database update
+```
+
+5. Run the backend:
+```bash
 dotnet run
 ```
-Backend runs by default at https://localhost:7042
 
-Frontend
+The backend API will be available at `https://localhost:7201`
+
+### Frontend Setup
+
+1. Navigate to the frontend directory:
 ```bash
 cd frontend
+```
+
+2. Install dependencies:
+```bash
 npm install
+```
+
+3. Start the development server:
+```bash
 npm run dev
 ```
-Frontend runs at http://localhost:5173
 
----
-
-## Database: EF Core migrations (dev)
-
-Typical dev reset (removes dev data)
-```powershell
-cd .\backend
-dotnet tool update -g dotnet-ef
-dotnet ef database drop -f
-Remove-Item -Recurse -Force .\Migrations
-dotnet ef migrations add InitialCreate
-dotnet ef database update
-```
-
-Baseline an existing database (keep current data/schema)
-```powershell
-cd .\backend
-dotnet tool update -g dotnet-ef
-Remove-Item -Recurse -Force .\Migrations
-dotnet ef migrations add Baseline --ignore-changes
-dotnet ef database update
-```
-
-Deploy to prod (idempotent)
-```powershell
-cd .\backend
-dotnet ef migrations script --idempotent -o .\migrations-prod.sql
-# Run in SSMS or:
-sqlcmd -S tcp:OLIVERRANDOM\SQLEXPRESS01,1433 -U app_genesis -P "ChangeMe!Strong#Password2025" -d GenesisOnboardingProd -i ".\migrations-prod.sql"
-```
-
----
-
-## Auth: JWT name mapping and UI fallback
-
-- Map multiple name claims (name, unique_name, preferred_username, ASP.NET namespaced).
-- Use string user.id (JWT sub/nameidentifier).
-- UI fallback:
-```tsx
-<span>
-  Welcome, <strong>{user?.name ?? user?.email ?? 'User'}</strong>
-</span>
-```
-
----
-
-## Git: connect, push, and recover
-
-Connect to GitHub
-```powershell
-cd "C:\Users\OliverDavies\Downloads\GenesisOnboardingTest-main"
-git init
-git remote add origin https://github.com/OliverDaviesCodes/GenesisOnboardingTest.git
-git add -A
-git commit -m "Initial commit"
-git branch -M main
-git push -u origin main
-```
-
-First pull merge issue
-```powershell
-git fetch origin
-git pull --allow-unrelated-histories origin main
-```
-
-Recovery
-```powershell
-git reset --hard ORIG_HEAD
-git reflog -n 30
-git reset --hard HEAD@{N}
-```
-
----
+The frontend will be available at `http://localhost:5173`
 
 ## API Endpoints
 
-Auth
-- POST /api/auth/login
-- POST /api/auth/register
+### Authentication
+- `POST /api/auth/login` - User login
+- `POST /api/auth/register` - User registration
 
-Data Entries
-- GET /api/dataentries
-- GET /api/dataentries/{id}
-- POST /api/dataentries
-- PUT /api/dataentries/{id}
-- DELETE /api/dataentries/{id}
+### Data Entries
+- `GET /api/dataentries` - Get all data entries for authenticated user
+- `GET /api/dataentries/{id}` - Get specific data entry
+- `POST /api/dataentries` - Create new data entry
+- `PUT /api/dataentries/{id}` - Update data entry
+- `DELETE /api/dataentries/{id}` - Delete data entry
 
----
+## Security Features
 
-## Quick Troubleshooting
+- **JWT Authentication**: Secure token-based authentication
+- **Password Hashing**: BCrypt for secure password storage
+- **CORS Configuration**: Properly configured for cross-origin requests
+- **SQL Injection Protection**: Parameterized queries via Entity Framework
+- **Input Validation**: Server-side and client-side validation
+- **Authorization**: Role-based access control for data operations
 
-- SQL timeout:
-  - Use correct sqlcmd: -S tcp:OLIVERRANDOM\SQLEXPRESS01,1433 -E -l 30
-  - Enable TCP/IP, set 1433, open firewall, or start SQL Browser.
-- “Object already exists”:
-  - Use idempotent EF script; baseline if schema already matches.
-- JWT name still “User”:
-  - Log claim keys once and map the exact key used by your token provider.
-- GitHub shows nothing:
-  - Ensure commits exist, remote set, branch pushed to origin/main.
+## Project Structure
+
+```
+├── backend/                 # .NET Core Web API
+│   ├── Controllers/         # API controllers
+│   ├── Data/               # Database context
+│   ├── DTOs/               # Data transfer objects
+│   ├── Models/             # Entity models
+│   ├── Services/           # Business logic services
+│   └── Migrations/         # EF Core migrations
+├── frontend/               # React/Vite application
+│   ├── src/
+│   │   ├── components/     # React components
+│   │   ├── contexts/       # React contexts
+│   │   ├── pages/          # Page components
+│   │   ├── services/       # API services
+│   │   └── types/          # TypeScript type definitions
+│   └── public/             # Static assets
+```
+
+## Development Notes
+
+- The backend uses LocalDB by default for development
+- CORS is configured to allow requests from `localhost:5173` and `localhost:3000`
+- JWT tokens expire after 7 days
+- All API endpoints except authentication require valid JWT token
+- The data grid supports real-time editing, deletion, and summary calculations
+
+## Building for Production
+
+### Backend
+```bash
+cd backend
+dotnet publish -c Release
+```
+
+### Frontend
+```bash
+cd frontend
+npm run build
+```
+
+The built frontend files will be in the `dist/` directory and can be served by any static file server.
