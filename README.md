@@ -20,14 +20,14 @@ A full‑stack web application built with React/Vite frontend and .NET 8 Web API
 
 ## Production SQL Server Setup (step‑by‑step)
 
-Target instance: OLIVERRANDOM\SQLEXPRESS01 (SQL Server 2022 Express). Replace names/passwords as needed.
+Target instance used in testing: OLIVERRANDOM\SQLEXPRESS01 (SQL Server 2022 Express). Replace names/passwords as needed.
 
-1) Make sure SQL is running
+1) Ensure SQL Server is running
 ```powershell
 Get-Service 'MSSQL$SQLEXPRESS01'   # Status should be Running
 ```
 
-2) Enable TCP/IP and set a fixed port
+2) Enable TCP/IP and set a fixed port (once)
 - Open “SQL Server Configuration Manager”.
 - SQL Server Network Configuration → Protocols for SQLEXPRESS01 → TCP/IP → Enabled = Yes.
 - TCP/IP → Properties → IP Addresses:
@@ -40,7 +40,7 @@ Get-Service 'MSSQL$SQLEXPRESS01'   # Status should be Running
 netsh advfirewall firewall add rule name="SQL Server SQLEXPRESS01 1433" dir=in action=allow protocol=TCP localport=1433
 ```
 
-4) (Optional) Use SQL Browser instead of a fixed port
+4) Optional: use SQL Browser instead of a fixed port
 ```powershell
 Get-Service 'SQLBrowser' | Start-Service
 # Then you can connect without ",1433"
@@ -72,7 +72,7 @@ EXEC sp_addrolemember N'db_datareader', N'app_genesis';
 GO
 EXEC sp_addrolemember N'db_datawriter', N'app_genesis';
 GO
--- Only if your deployment needs schema changes; remove after:
+-- Only if deployment needs schema changes (remove after):
 -- EXEC sp_addrolemember N'db_ddladmin', N'app_genesis';
 -- GO
 
@@ -83,7 +83,7 @@ GO
 
 7) Test the app login works
 ```powershell
-sqlcmd -S tcp:OLIVERRANDOM\SQLEXPRESS01,1433 -U app_genesis -P "ChangeMe!Strong#Password2025" -d GenesisOnboardingProd -Q "SELECT SUSER_SNAME(), DB_NAME();"
+sqlcmd -S tcp:OLIVERRANDOM\SQLEXPRESS01,1433 -U app_genesis -P "ChangeMe!Strong#Password2025" -d GenesisOnboardingProd -Q "SELECT SUSER_SNAME() AS LoginName, DB_NAME() AS CurrentDb;"
 ```
 
 8) Deploy schema to prod (idempotent EF script)
@@ -98,7 +98,6 @@ sqlcmd -S tcp:OLIVERRANDOM\SQLEXPRESS01,1433 -U app_genesis -P "ChangeMe!Strong#
 
 9) Point the site to the prod DB
 App settings (prefer environment variables in real prod):
-
 ```json
 {
   "ConnectionStrings": {
@@ -107,7 +106,7 @@ App settings (prefer environment variables in real prod):
 }
 ```
 
-Or via environment variable (recommended):
+Or via environment variable:
 ```powershell
 [Environment]::SetEnvironmentVariable(
   "ConnectionStrings__DefaultConnection",
@@ -125,38 +124,56 @@ dotnet run
 
 ---
 
-## What went wrong (and how it was fixed)
+## What went wrong (time‑boxed production DB attempt)
 
-SQL connection timeouts (sqlcmd)
-- Symptoms: “TCP Provider: The wait operation timed out… Login timeout expired”.
+- TCP timeouts with sqlcmd
+  - Symptom: “TCP Provider: The wait operation timed out… Login timeout expired”.
 
-- Causes:
-  - Wrong sqlcmd syntax (missing -S and instance).
-  - TCP/IP not enabled or no static port.
-  - Firewall blocking 1433.
+  - Causes discovered:
+    - Wrong connection syntax tried (“1,1433 -E” without -S and instance).
+    - TCP/IP not enabled or not listening on a fixed port.
+    - Firewall not opened for 1433.
 
-- Fix:
-  - Use: sqlcmd -S tcp:OLIVERRANDOM\SQLEXPRESS01,1433 -E -l 30
-  - Enable TCP/IP, set port 1433, open firewall.
-  - Alternatively start SQL Browser and omit “,1433”.
+  - Fixes applied:
+    - Corrected command: sqlcmd -S tcp:OLIVERRANDOM\SQLEXPRESS01,1433 -E -l 30
+    - Enabled TCP/IP and set port 1433 in SQL Server Configuration Manager.
+    - Added Windows Firewall rule for 1433.
+    - Alternative: started SQL Browser and connected without specifying a port.
 
-EF Core migrations duplicate/“There is already an object named 'Users'”
-- Cause: Merge duplicated migration code; prod already had tables.
-- Fix options:
-  - Dev reset: delete Migrations, drop dev DB, re-add InitialCreate, update DB.
-  - Baseline existing DB: delete Migrations, add Baseline with --ignore-changes, update DB, then create next real migration.
+- EF Core migrations and existing objects
+  - “There is already an object named 'Users'” when applying schema.
+  - Cause: Duplicate/merged migrations and an already‑provisioned DB.
+  - Resolution options:
+    - Dev reset: drop dev DB, delete Migrations, add InitialCreate, update DB.
+    - Baseline prod: delete Migrations, add Baseline with --ignore-changes, update DB, then create the next real migration and deploy via idempotent script.
 
-JWT name showed as “User”
-- Cause: Name claim key differed (namespaced ASP.NET claims).
-- Fix: Map multiple name claims in getUserFromToken and fallback to email. Use string user.id (JWT sub/nameidentifier).
+- JWT name claim showed as “User”
+  - Cause: Name was emitted under a different claim key (ASP.NET namespaced claims).
+  - Fix: Map multiple claim keys in getUserFromToken and fallback to email; use string user.id to match JWT sub/nameidentifier.
 
-Git issues (not a repo, unrelated histories, recovery)
-- Initialize and set remote:
-  - git init; git remote add origin <repo-url>; git add -A; git commit; git push -u origin main
-- Unrelated histories on first pull:
-  - git pull --allow-unrelated-histories origin main
-- Quick recovery after bad command:
-  - git reset --hard ORIG_HEAD; git reflog to locate a good state
+- Git setup and recovery
+  - Not a git repository and “unrelated histories” issues while connecting to GitHub.
+  - Fixes:
+    - git init; add remote; initial commit; push -u origin main.
+    - First pull with git pull --allow-unrelated-histories origin main.
+    - Recovery after mistakes: git reset --hard ORIG_HEAD; git reflog to locate a good state.
+
+Time constraints
+- Ran out of time while wiring production TCP and deploying schema cleanly.
+- Documented exact commands and recovery steps to finish quickly later.
+
+---
+
+## Next steps (checklist to production‑ready)
+
+- [ ] Confirm SQL instance listens on 1433 (or start SQL Browser) and firewall is open.
+- [ ] Create DB/login (already scripted above).
+- [ ] Generate EF idempotent script and run on prod DB.
+- [ ] Set production connection string via environment variable.
+- [ ] Run backend in Production mode and test basic CRUD.
+- [ ] Remove db_ddladmin from app_genesis if granted temporarily.
+- [ ] Configure backups (FULL nightly, DIFF daily, LOG every 15 min).
+- [ ] Add monitoring/alerts and enforce TLS (TrustServerCertificate=False with a real cert).
 
 ---
 
@@ -185,9 +202,6 @@ npm run dev
 ```
 Frontend runs at http://localhost:5173
 
-Dev connection string (appsettings.json)
-- Defaults to LocalDB.
-
 ---
 
 ## Database: EF Core migrations (dev)
@@ -210,6 +224,13 @@ Remove-Item -Recurse -Force .\Migrations
 dotnet ef migrations add Baseline --ignore-changes
 dotnet ef database update
 ```
+
+Deploy to prod (idempotent)
+```powershell
+cd .\backend
+dotnet ef migrations script --idempotent -o .\migrations-prod.sql
+# Run in SSMS or:
+sqlcmd -S tcp:OLIVERRANDOM\SQLEXPRESS01,1433 -U app_genesis -P "ChangeMe!Strong#Password2025" -d GenesisOnboardingProd -i ".\migrations-prod.sql"
 ```
 
 ---
@@ -267,23 +288,6 @@ Data Entries
 - POST /api/dataentries
 - PUT /api/dataentries/{id}
 - DELETE /api/dataentries/{id}
-
----
-
-## Build for Production
-
-Backend
-```bash
-cd backend
-dotnet publish -c Release
-```
-
-Frontend
-```bash
-cd frontend
-npm run build
-```
-Outputs in frontend/dist.
 
 ---
 
